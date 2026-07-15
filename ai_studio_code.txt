@@ -1,0 +1,185 @@
+import React, { useState } from 'react';
+import { Heart, Calendar, MessageCircle, User, Fingerprint, Flame } from 'lucide-react';
+import DeviceSimulator from './components/DeviceSimulator';
+import Auth2FA from './components/Auth2FA';
+import IdentityVerification from './components/IdentityVerification';
+import DatingFeed from './components/DatingFeed';
+import EventsList from './components/EventsList';
+import ChatList from './components/ChatList';
+import UserProfileDetails from './components/UserProfile';
+import MatchToast from './components/MatchToast';
+import { UserProfile, AppView } from './types';
+
+export default function App() {
+  const [platform, setPlatform] = useState<'ios' | 'android'>('ios');
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [activeView, setActiveView] = useState<AppView>('welcome');
+  const [activeTab, setActiveTab] = useState<'feed' | 'events' | 'chat' | 'profile'>('feed');
+  const [matches, setMatches] = useState<UserProfile[]>([]);
+  const [authModeParam, setAuthModeParam] = useState<'register' | 'login'>('register');
+  const [toastMatchUser, setToastMatchUser] = useState<UserProfile | null>(null);
+
+  // Monitorização de novos matches guardados localmente
+  React.useEffect(() => {
+    if (currentUser) {
+      const savedMatches = localStorage.getItem(`conexao_matches_${currentUser.id}`);
+      if (savedMatches) {
+        try { setMatches(JSON.parse(savedMatches)); } catch (e) { setMatches([]); }
+      } else { setMatches([]); }
+    } else { setMatches([]); }
+  }, [currentUser]);
+
+  const handleAuthSuccess = (user: UserProfile) => {
+    setCurrentUser(user);
+    setActiveView('feed');
+    setActiveTab('feed');
+  };
+
+  const handleNewMatch = (matchedUser: UserProfile) => {
+    setMatches(prev => {
+      if (prev.some(u => u.id === matchedUser.id)) return prev;
+      const next = [...prev, matchedUser];
+      if (currentUser) {
+        localStorage.setItem(`conexao_matches_${currentUser.id}`, JSON.stringify(next));
+      }
+      return next;
+    });
+    setToastMatchUser(matchedUser); // Ativa o banner de "It's a Match!"
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setMatches([]);
+    setActiveView('welcome');
+  };
+
+  return (
+    <DeviceSimulator platform={platform} setPlatform={setPlatform}>
+      {currentUser && (
+        <MatchToast 
+          matchedUser={toastMatchUser} 
+          currentUser={currentUser} 
+          onClose={() => setToastMatchUser(null)}
+          onGoToChat={() => {
+            setActiveView('feed');
+            setActiveTab('chat');
+          }}
+        />
+      )}
+
+      {/* Roteamento de Ecrãs */}
+      {activeView === 'welcome' && (
+        <div className="flex-1 flex flex-col justify-between p-6 bg-black text-center select-none pt-12 text-white relative">
+          <div className="my-auto space-y-6 flex flex-col items-center">
+            <div className="relative inline-flex">
+              <div className="w-20 h-20 bg-gradient-to-tr from-red-600 via-orange-500 to-yellow-500 rounded-3xl flex items-center justify-center p-[3px] shadow-lg">
+                <div className="w-full h-full bg-black rounded-[21px] flex items-center justify-center relative overflow-hidden">
+                  <Flame className="w-11 h-11 text-rose-500 fill-rose-500 animate-pulse" />
+                  <span className="absolute text-[9px] font-black text-yellow-500 bottom-4 left-1/2 -translate-x-1/2 select-none">★ AO</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <h1 className="text-4xl font-sans font-black tracking-tight uppercase">Conexão</h1>
+              <p className="text-[10px] text-rose-500 font-black uppercase tracking-widest bg-neutral-900 border border-neutral-850 px-3 py-1 rounded-full">
+                🔥 O Tinder 100% Angolano
+              </p>
+            </div>
+            <p className="text-xs text-neutral-300 max-w-[280px] leading-relaxed">
+              O espaço seguro para dar match, conversar e curtir um mambo calmo em Angola.
+            </p>
+          </div>
+
+          <div className="space-y-3 mt-4">
+            <button
+              onClick={() => { setAuthModeParam('register'); setActiveView('auth'); }}
+              className="w-full py-3.5 bg-gradient-to-r from-rose-600 to-orange-500 hover:from-rose-700 text-white font-bold rounded-xl text-xs uppercase tracking-widest cursor-pointer"
+            >
+              📝 Criar Conta no Tinder Angolano
+            </button>
+            <button
+              onClick={() => { setAuthModeParam('login'); setActiveView('auth'); }}
+              className="w-full py-3 bg-neutral-900 border border-neutral-800 text-white font-bold rounded-xl text-xs uppercase tracking-widest cursor-pointer"
+            >
+              🔐 Entrar com Telemóvel →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeView === 'auth' && (
+        <Auth2FA 
+          platform={platform} 
+          onAuthSuccess={handleAuthSuccess} 
+          initialMode={authModeParam}
+          onBack={() => setActiveView('welcome')}
+        />
+      )}
+
+      {activeView === 'feed' && currentUser && (
+        <div className="flex-1 flex flex-col overflow-hidden justify-between">
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {activeTab === 'feed' && (
+              <DatingFeed
+                currentUser={currentUser}
+                onNewMatch={handleNewMatch}
+                onNavigateToChat={() => setActiveTab('chat')}
+              />
+            )}
+            
+            {activeTab === 'events' && (
+              <EventsList
+                currentUser={currentUser}
+                onNavigateToVerification={() => setActiveView('verify')}
+              />
+            )}
+
+            {activeTab === 'chat' && (
+              <ChatList
+                currentUser={currentUser}
+                matches={matches}
+                onBackToFeed={() => setActiveTab('feed')}
+              />
+            )}
+
+            {activeTab === 'profile' && (
+              <UserProfileDetails
+                currentUser={currentUser}
+                onChangeUserAge={(age) => setCurrentUser({ ...currentUser, age })}
+                onChangeUserOrientation={(orientation) => setCurrentUser({ ...currentUser, orientation })}
+                onNavigateVerify={() => setActiveView('verify')}
+                onLogout={handleLogout}
+                onUpdateProfile={(profile) => setCurrentUser(profile)}
+              />
+            )}
+          </div>
+
+          {/* Navegador Inferior */}
+          <div className="bg-neutral-900 border-t border-neutral-850 h-16 flex items-center justify-around select-none">
+            <button onClick={() => setActiveTab('feed')} className={`flex flex-col items-center justify-center w-14 h-full ${activeTab === 'feed' ? 'text-rose-500' : 'text-neutral-400'}`}>
+              <Heart className={`w-4 h-4 ${activeTab === 'feed' ? 'fill-current' : ''}`} />
+              <span className="text-[9px] font-bold uppercase">Gostos</span>
+            </button>
+
+            <button onClick={() => setActiveTab('events')} className={`flex flex-col items-center justify-center w-14 h-full ${activeTab === 'events' ? 'text-rose-500' : 'text-neutral-400'}`}>
+              <Calendar className="w-4 h-4" />
+              <span className="text-[9px] font-bold uppercase">Eventos</span>
+            </button>
+
+            <button onClick={() => setActiveTab('chat')} className={`flex flex-col items-center justify-center w-14 relative h-full ${activeTab === 'chat' ? 'text-rose-500' : 'text-neutral-400'}`}>
+              <MessageCircle className="w-4 h-4" />
+              {matches.length > 0 && <div className="absolute top-2.5 right-3 w-2 h-2 bg-rose-500 rounded-full" />}
+              <span className="text-[9px] font-bold uppercase">Mensagens</span>
+            </button>
+
+            <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center justify-center w-14 h-full ${activeTab === 'profile' ? 'text-rose-500' : 'text-neutral-400'}`}>
+              <User className="w-4 h-4" />
+              <span className="text-[9px] font-bold uppercase">Conta</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </DeviceSimulator>
+  );
+}
